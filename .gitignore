@@ -1,0 +1,44 @@
+# ── Node.js ──
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# ── Build Output ──
+dist/
+build/
+*.tsbuildinfo
+
+# ── Environment Variables ──
+.env
+.env.local
+.env.*.local
+
+# ── Data & Logs ──
+data/
+logs/
+*.log
+*.db
+*.db-shm
+*.db-wal
+
+# ── IDE / Editor ──
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ── Docker ──
+docker-compose.override.yml
+
+# ── Temporary Files ──
+tmp/
+temp/
+*.tmp
+
+# ── OS Files ──
+Thumbs.db
+.DS_Store
