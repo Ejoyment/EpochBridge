@@ -71,3 +71,22 @@ export interface GatewayHealth {
   messagesProcessed: number;
   lastCDCEvent?: string;
 }
+
+// ─── Auth Types ───────────────────────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  username: string;
+  passwordHash: string;
+  role: string;
+  createdAt: string;
+}
+
+export interface AuthPayload {
+  token: string;
+  user: {
+    id: string;
+    username: string;
+    role: string;
+  };
+}
