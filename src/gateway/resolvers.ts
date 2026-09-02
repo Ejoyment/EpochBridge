@@ -1,9 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
+import { GraphQLError } from 'graphql';
 import { pubsub, CDC_TOPIC } from '../cdc/pubsub-bridge';
-import { getLegacyDb } from '../legacy-db/connection';
+import { getLegacyDb, hashPassword } from '../legacy-db/connection';
 import { introspectLegacyDB, generateSchema } from '../intelligence/schema-generator';
+import { signToken } from '../auth/jwt';
+import { requireAuth } from '../auth/permissions';
 import { logger } from '../utils/logger';
 import type { CDCEvent } from '../types';
+import type { AuthContext } from '../auth/context';
 
 const startTime = Date.now();
 let messagesProcessed = 0;
@@ -17,7 +21,8 @@ export function incrementMessages(): void { messagesProcessed++; lastCDCEvent = 
 export const resolvers = {
   Query: {
     // ── Customers ──────────────────────────────────────────────────────────
-    allCustomers: (_: unknown, args: { limit?: number; offset?: number; status?: string }) => {
+    allCustomers: (_: unknown, args: { limit?: number; offset?: number; status?: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       const db = getLegacyDb();
       if (args.status) {
         return db.prepare('SELECT * FROM CUSTMAST WHERE CUST_STAT = ? LIMIT ? OFFSET ?')
@@ -27,12 +32,14 @@ export const resolvers = {
         .all(args.limit ?? 100, args.offset ?? 0);
     },
 
-    customer: (_: unknown, args: { id: string }) => {
+    customer: (_: unknown, args: { id: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       return getLegacyDb().prepare('SELECT * FROM CUSTMAST WHERE CUST_ID = ?').get(args.id);
     },
 
     // ── Inventory ──────────────────────────────────────────────────────────
-    allInventory: (_: unknown, args: { limit?: number; offset?: number; warehouse?: string }) => {
+    allInventory: (_: unknown, args: { limit?: number; offset?: number; warehouse?: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       const db = getLegacyDb();
       if (args.warehouse) {
         return db.prepare('SELECT * FROM INVNTRY WHERE ITEM_WHSE = ? LIMIT ? OFFSET ?')
@@ -42,12 +49,14 @@ export const resolvers = {
         .all(args.limit ?? 100, args.offset ?? 0);
     },
 
-    inventoryItem: (_: unknown, args: { id: string }) => {
+    inventoryItem: (_: unknown, args: { id: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       return getLegacyDb().prepare('SELECT * FROM INVNTRY WHERE ITEM_ID = ?').get(args.id);
     },
 
     // ── Orders ─────────────────────────────────────────────────────────────
-    allOrders: (_: unknown, args: { limit?: number; offset?: number; status?: string }) => {
+    allOrders: (_: unknown, args: { limit?: number; offset?: number; status?: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       const db = getLegacyDb();
       if (args.status) {
         return db.prepare('SELECT * FROM ORDERHDR WHERE ORDR_STAT = ? LIMIT ? OFFSET ?')
@@ -57,28 +66,34 @@ export const resolvers = {
         .all(args.limit ?? 100, args.offset ?? 0);
     },
 
-    order: (_: unknown, args: { id: string }) => {
+    order: (_: unknown, args: { id: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       return getLegacyDb().prepare('SELECT * FROM ORDERHDR WHERE ORDR_ID = ?').get(args.id);
     },
 
-    ordersByCustomer: (_: unknown, args: { customerId: string }) => {
+    ordersByCustomer: (_: unknown, args: { customerId: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       return getLegacyDb()
         .prepare('SELECT * FROM ORDERHDR WHERE CUST_ID = ? ORDER BY ORDR_DATE DESC')
         .all(args.customerId);
     },
 
     // ── Platform ───────────────────────────────────────────────────────────
-    health: () => ({
-      status: 'healthy',
-      uptime: (Date.now() - startTime) / 1000,
-      kafkaConnected,
-      legacyDbConnected: true,
-      activeSubscriptions,
-      messagesProcessed,
-      lastCDCEvent,
-    }),
+    health: (_: unknown, __: unknown, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
+      return {
+        status: 'healthy',
+        uptime: (Date.now() - startTime) / 1000,
+        kafkaConnected,
+        legacyDbConnected: true,
+        activeSubscriptions,
+        messagesProcessed,
+        lastCDCEvent,
+      };
+    },
 
-    generateSchemaFromLegacyDB: async () => {
+    generateSchemaFromLegacyDB: async (_: unknown, __: unknown, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       const db = getLegacyDb();
       const legacySchema = introspectLegacyDB(db);
       const artifact = await generateSchema(legacySchema);
@@ -90,11 +105,19 @@ export const resolvers = {
         llmProvider: artifact.llmProvider,
       };
     },
+
+    // ── Auth ───────────────────────────────────────────────────────────────
+    me: (_: unknown, __: unknown, ctx: { auth?: AuthContext }) => {
+      const user = ctx.auth?.user;
+      if (!user) return null;
+      return { id: user.id, username: user.username, role: user.role };
+    },
   },
 
   // ── Mutations ────────────────────────────────────────────────────────────
   Mutation: {
-    updateCustomer: (_: unknown, args: { id: string; status?: string; creditLimit?: number }) => {
+    updateCustomer: (_: unknown, args: { id: string; status?: string; creditLimit?: number }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       const db = getLegacyDb();
       const now = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       if (args.status !== undefined) {
@@ -108,19 +131,69 @@ export const resolvers = {
       return db.prepare('SELECT * FROM CUSTMAST WHERE CUST_ID = ?').get(args.id);
     },
 
-    updateInventoryQuantity: (_: unknown, args: { id: string; quantity: number }) => {
+    updateInventoryQuantity: (_: unknown, args: { id: string; quantity: number }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       const db = getLegacyDb();
       db.prepare('UPDATE INVNTRY SET ITEM_QTY = ? WHERE ITEM_ID = ?').run(args.quantity, args.id);
       return db.prepare('SELECT * FROM INVNTRY WHERE ITEM_ID = ?').get(args.id);
     },
 
-    createOrder: (_: unknown, args: { customerId: string; notes?: string }) => {
+    createOrder: (_: unknown, args: { customerId: string; notes?: string }, ctx: { auth?: AuthContext }) => {
+      requireAuth(ctx);
       const db = getLegacyDb();
       const id = 'ORD-' + Date.now();
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       db.prepare('INSERT INTO ORDERHDR (ORDR_ID, CUST_ID, ORDR_DATE, ORDR_STAT, ORDR_TOTAL, ORDR_NOTES) VALUES (?, ?, ?, ?, ?, ?)')
         .run(id, args.customerId, today, 'O', 0.00, args.notes ?? null);
       return db.prepare('SELECT * FROM ORDERHDR WHERE ORDR_ID = ?').get(id);
+    },
+
+    // ── Auth ───────────────────────────────────────────────────────────────
+    register: (_: unknown, args: { username: string; password: string }) => {
+      const db = getLegacyDb();
+
+      const existing = db.prepare('SELECT ID FROM USERS WHERE USERNAME = ?').get(args.username);
+      if (existing) {
+        throw new GraphQLError('Username already taken', {
+          extensions: { code: 'BAD_USER_INPUT' },
+        });
+      }
+
+      const id = 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const now = new Date().toISOString();
+      const passwordHash = hashPassword(args.password);
+
+      db.prepare('INSERT INTO USERS (ID, USERNAME, PASSWORD_HASH, ROLE, CREATED_AT) VALUES (?, ?, ?, ?, ?)')
+        .run(id, args.username, passwordHash, 'user', now);
+
+      const token = signToken({ id, username: args.username, role: 'user' });
+      return { token, user: { id, username: args.username, role: 'user' } };
+    },
+
+    login: (_: unknown, args: { username: string; password: string }) => {
+      const db = getLegacyDb();
+      const user = db.prepare('SELECT * FROM USERS WHERE USERNAME = ?').get(args.username) as {
+        ID: string;
+        USERNAME: string;
+        PASSWORD_HASH: string;
+        ROLE: string;
+      } | undefined;
+
+      if (!user) {
+        throw new GraphQLError('Invalid username or password', {
+          extensions: { code: 'UNAUTHENTICATED' },
+        });
+      }
+
+      const passwordHash = hashPassword(args.password);
+      if (passwordHash !== user.PASSWORD_HASH) {
+        throw new GraphQLError('Invalid username or password', {
+          extensions: { code: 'UNAUTHENTICATED' },
+        });
+      }
+
+      const token = signToken({ id: user.ID, username: user.USERNAME, role: user.ROLE });
+      return { token, user: { id: user.ID, username: user.USERNAME, role: user.ROLE } };
     },
   },
 

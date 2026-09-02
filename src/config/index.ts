@@ -24,5 +24,10 @@ export const config = {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
   },
 
+  auth: {
+    jwtSecret: process.env.JWT_SECRET || 'epochbridge-dev-secret-change-in-production',
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  },
+
   dataDir: path.resolve(__dirname, '../../data'),
 };

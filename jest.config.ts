@@ -18,6 +18,7 @@ const config: Config = {
     'src/intelligence/schema-generator.ts',
     'src/middleware/security.ts',
     'src/legacy-db/connection.ts',
+    'src/auth/**/*.ts',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'text-summary'],

@@ -84,6 +84,19 @@ export const typeDefs = gql`
     llmProvider: String!
   }
 
+  """An authenticated user"""
+  type User {
+    id: String!
+    username: String!
+    role: String!
+  }
+
+  """Authentication payload returned on successful login/register"""
+  type AuthPayload {
+    token: String!
+    user: User!
+  }
+
   type Query {
     # ── Customer queries ──────────────────────────────────────────────────────
     allCustomers(limit: Int, offset: Int, status: String): [Customer!]!
@@ -101,12 +114,19 @@ export const typeDefs = gql`
     # ── Platform ──────────────────────────────────────────────────────────────
     health: GatewayHealth!
     generateSchemaFromLegacyDB: GeneratedSchema!
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    me: User
   }
 
   type Mutation {
     updateCustomer(id: String!, status: String, creditLimit: Float): Customer
     updateInventoryQuantity(id: String!, quantity: Int!): Inventory
     createOrder(customerId: String!, notes: String): OrderHeader
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    register(username: String!, password: String!): AuthPayload!
+    login(username: String!, password: String!): AuthPayload!
   }
 
   type Subscription {

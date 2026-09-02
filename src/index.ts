@@ -29,6 +29,7 @@ import { CDCConsumer } from './cdc/consumer';
 import { publishCDCEvent } from './cdc/pubsub-bridge';
 import { getLegacyDb } from './legacy-db/connection';
 import { apiRateLimiter, depthLimiter, securityHeaders, requestLogger } from './middleware/security';
+import { buildAuthContext, buildWSAuthContext } from './auth/context';
 
 async function main(): Promise<void> {
   // ── 1. Ensure legacy DB is initialized ─────────────────────────────────────
@@ -48,7 +49,9 @@ async function main(): Promise<void> {
     {
       schema,
       onConnect: (ctx) => {
-        logger.info('[WS] Client connected: ' + (ctx.connectionParams?.clientId ?? 'anonymous'));
+        const clientId = ctx.connectionParams?.clientId ?? 'anonymous';
+        const hasToken = !!ctx.connectionParams?.token;
+        logger.info('[WS] Client connected: ' + clientId + (hasToken ? ' (authenticated)' : ' (anonymous)'));
       },
       onDisconnect: () => {
         logger.info('[WS] Client disconnected');
@@ -90,7 +93,10 @@ async function main(): Promise<void> {
   app.use(
     '/graphql',
     expressMiddleware(apolloServer, {
-      context: async () => ({ legacyDb: db }),
+      context: async ({ req }) => ({
+        legacyDb: db,
+        auth: buildAuthContext(req),
+      }),
     })
   );
 
