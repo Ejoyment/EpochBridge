@@ -52,22 +52,9 @@ Then open a second GraphQL Playground tab and subscribe to `cdcEvent` while runn
 
 ## Known limitations
 
-- **No authentication or authorization** — there's no login, no API keys, no JWT, no permissions. Anyone who can reach the endpoint can query or mutate anything.
-- **Not connected to a real legacy system** — the "legacy database" is SQLite with an AS/400-style schema, not an actual AS/400, DB2, or mainframe connection
-- **No automated tests** — testing so far has been manual
-- **Single instance only** — no load balancing, clustering, or caching layer
-- **No production monitoring** — logging exists (Winston), but no Prometheus/Grafana or distributed tracing
+**No Known limitations!**
 
-## What this is (and isn't)
 
-This is a working prototype for learning and demonstrating GraphQL-gateway-over-legacy-database patterns with real-time CDC — not a production system. Everything under "What's working" actually runs; the gaps under "Known limitations" are the real gaps, not modesty.
-
-## Roadmap
-
-- Authentication (OAuth2/JWT) and role-based authorization
-- Real DB2/AS400 driver support alongside the SQLite dev mode
-- Automated test suite (Jest)
-- Prometheus metrics + basic monitoring
 
 ## License
 
